@@ -1,21 +1,23 @@
 <?php
 session_start();
 require_once __DIR__ . '/conexion.php';
+require_once __DIR__ . '/utils_csrf.php';
 if(($_SESSION['rol'] ?? '') !== 'admin'){ http_response_code(403); die('Acceso restringido'); }
 $ok=''; $err='';
 if($_SERVER['REQUEST_METHOD']==='POST'){
   $id = (int)($_POST['id'] ?? 0);
   $rol = $_POST['rol'] ?? 'cliente';
-  if(in_array($rol, ['cliente','admin'], true) && $id){
+  $token = $_POST['csrf'] ?? '';
+  if(!csrf_validate($token)){
+    $err = 'Token CSRF inválido';
+  } elseif(isset($_POST['delete']) && $id){
+    $pdo->prepare("DELETE FROM usuarios WHERE id=?")->execute([$id]);
+    $ok = 'Usuario eliminado';
+  } elseif(in_array($rol, ['cliente','admin'], true) && $id) {
     $st = $pdo->prepare("UPDATE usuarios SET rol=? WHERE id=?");
     $st->execute([$rol, $id]);
     $ok = 'Rol actualizado';
   }
-}
-if(isset($_GET['del'])){
-  $id = (int)$_GET['del'];
-  $pdo->prepare("DELETE FROM usuarios WHERE id=?")->execute([$id]);
-  $ok = 'Usuario eliminado';
 }
 $rows = $pdo->query("SELECT id,nombre,email,rol,created_at FROM usuarios ORDER BY id DESC")->fetchAll();
 ?>
@@ -39,6 +41,7 @@ $rows = $pdo->query("SELECT id,nombre,email,rol,created_at FROM usuarios ORDER B
         <td><?= htmlspecialchars($r['email']) ?></td>
         <td>
           <form method="post" style="display:flex;gap:6px;align-items:center">
+            <input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token()) ?>">
             <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
             <select name="rol">
               <option value="cliente" <?= $r['rol']==='cliente'?'selected':'' ?>>cliente</option>
@@ -48,7 +51,13 @@ $rows = $pdo->query("SELECT id,nombre,email,rol,created_at FROM usuarios ORDER B
           </form>
         </td>
         <td><?= htmlspecialchars($r['created_at']) ?></td>
-        <td><a href="admin_usuarios.php?del=<?= (int)$r['id'] ?>" onclick="return confirm('¿Eliminar usuario?')">Eliminar</a></td>
+        <td>
+          <form method="post" onsubmit="return confirm('¿Eliminar usuario?')" style="display:inline">
+            <input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token()) ?>">
+            <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+            <button name="delete" value="1" style="background:none;border:0;color:#0ea5e9;cursor:pointer;padding:0">Eliminar</button>
+          </form>
+        </td>
       </tr>
     <?php endforeach; ?>
   </table>

@@ -11,6 +11,9 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
   $token = $_POST['csrf'] ?? '';
   if(!csrf_validate($token)){
     $err = 'Token CSRF inválido';
+  } elseif(isset($_POST['delete']) && $id){
+    $pdo->prepare("DELETE FROM categorias WHERE id=?")->execute([$id]);
+    $ok='Categoría eliminada';
   } elseif($nombre){
     if($id){
       $st = $pdo->prepare("UPDATE categorias SET nombre=?, descripcion=? WHERE id=?");
@@ -22,11 +25,6 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
       $ok='Categoría creada';
     }
   } else { $err='Nombre requerido'; }
-}
-if(isset($_GET['del'])){
-  $id = (int)$_GET['del'];
-  $pdo->prepare("DELETE FROM categorias WHERE id=?")->execute([$id]);
-  $ok='Categoría eliminada';
 }
 $edit=null;
 if(isset($_GET['edit'])){
@@ -70,7 +68,11 @@ $rows = $pdo->query("SELECT * FROM categorias ORDER BY id DESC")->fetchAll();
         <td><?= htmlspecialchars($r['descripcion']) ?></td>
         <td>
           <a href="admin_categorias.php?edit=<?= (int)$r['id'] ?>">Editar</a> |
-          <a href="admin_categorias.php?del=<?= (int)$r['id'] ?>" onclick="return confirm('¿Eliminar?')">Eliminar</a>
+          <form method="post" style="display:inline" onsubmit="return confirm('¿Eliminar?')">
+            <input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token()) ?>">
+            <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+            <button name="delete" value="1" style="background:none;border:0;color:#0ea5e9;cursor:pointer;padding:0">Eliminar</button>
+          </form>
         </td>
       </tr>
     <?php endforeach; ?>

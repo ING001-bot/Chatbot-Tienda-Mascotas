@@ -30,7 +30,10 @@ $cartCount = 0; if(!empty($_SESSION['cart'])){ foreach($_SESSION['cart'] as $k=>
     <nav>
       <a href="cart.php" style="color:#fff;margin-right:14px">Carrito (<?= (int)$cartCount ?>)</a>
       <?php if(!empty($_SESSION['usuario_id'])): ?>
-        <a href="admin.php" style="color:#fff;margin-right:10px">Admin</a>
+        <a href="perfil.php" style="color:#fff;margin-right:10px">Mi cuenta</a>
+        <?php if(($_SESSION['rol'] ?? '') === 'admin'): ?>
+          <a href="admin.php" style="color:#fff;margin-right:10px">Admin</a>
+        <?php endif; ?>
         <a href="logout.php" style="color:#fff">Salir</a>
       <?php else: ?>
         <a href="login.php" style="color:#fff;margin-right:10px">Ingresar</a>
@@ -40,6 +43,12 @@ $cartCount = 0; if(!empty($_SESSION['cart'])){ foreach($_SESSION['cart'] as $k=>
   </header>
 
   <div class="container">
+    <?php if(!empty($_SESSION['flash_success'])): ?>
+      <div style="background:#dcfce7;border:1px solid #86efac;padding:10px;border-radius:8px;margin:10px 0">
+        <?= htmlspecialchars($_SESSION['flash_success']) ?>
+      </div>
+      <?php unset($_SESSION['flash_success']); ?>
+    <?php endif; ?>
     <form method="get" style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
       <input type="text" name="q" value="<?= htmlspecialchars($q) ?>" placeholder="Buscar productos..." style="flex:1;padding:10px;border:1px solid #cbd5e1;border-radius:8px">
       <select name="cat" style="padding:10px;border:1px solid #cbd5e1;border-radius:8px">
@@ -53,8 +62,9 @@ $cartCount = 0; if(!empty($_SESSION['cart'])){ foreach($_SESSION['cart'] as $k=>
     <h2>Nuevos productos</h2>
     <div class="grid">
       <?php foreach($productos as $p): ?>
+        <?php $img = $p['imagen'] ?? ''; $src = ($img && file_exists(__DIR__ . '/' . $img)) ? $img : 'https://placehold.co/400x300?text=Mascotas'; ?>
         <div class="card">
-          <img src="<?= htmlspecialchars($p['imagen'] ?: 'https://placehold.co/400x300?text=Mascotas') ?>" alt="">
+          <img src="<?= htmlspecialchars($src) ?>" alt="">
           <div class="b">
             <h3><a href="product.php?id=<?= (int)$p['id'] ?>" style="text-decoration:none;color:inherit"><?= htmlspecialchars($p['nombre']) ?></a></h3>
             <p><?= htmlspecialchars($p['categoria'] ?: 'Sin categoría') ?></p>

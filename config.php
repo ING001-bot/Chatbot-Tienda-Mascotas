@@ -12,6 +12,12 @@ $ASSEMBLYAI_API_KEY = ""; // Opción A reconocimiento de hablante
 $MICROSOFT_SPEAKER_API_KEY = ""; // Opción A alternativa
 $OPENAI_API_KEY = ""; // Opcional
 
+// Chatbot API
+// URL por defecto al backend Python local; puedes cambiarlo por un endpoint remoto
+$CHATBOT_API_URL = getenv('CHATBOT_API_URL') ?: 'http://127.0.0.1:5000/chatbot';
+// Clave opcional para firmar llamadas entre PHP y Python
+$CHATBOT_API_KEY = getenv('CHATBOT_API_KEY') ?: '';
+
 // SMTP (para PHPMailer)
 $SMTP_USER = "correo@gmail.com";
 $SMTP_PASS = "clave_de_aplicacion";

@@ -7,6 +7,9 @@ $prods = (int)$pdo->query("SELECT COUNT(*) c FROM productos")->fetch()['c'];
 $ventas = (float)$pdo->query("SELECT COALESCE(SUM(total),0) t FROM compras WHERE estado='pagado'")->fetch()['t'];
 $pend = (int)$pdo->query("SELECT COUNT(*) c FROM compras WHERE estado='pendiente'")->fetch()['c'];
 $top = $pdo->query("SELECT p.nombre, SUM(d.cantidad) s FROM detalles_compra d JOIN productos p ON p.id=d.producto_id GROUP BY d.producto_id ORDER BY s DESC LIMIT 5")->fetchAll();
+// Ventas últimos 14 días
+$ventasRows = $pdo->query("SELECT DATE(fecha) d, SUM(total) t FROM compras WHERE estado='pagado' GROUP BY DATE(fecha) ORDER BY d DESC LIMIT 14")->fetchAll();
+$ventasRows = array_reverse($ventasRows);
 ?>
 <!doctype html>
 <html lang="es">
@@ -16,6 +19,7 @@ $top = $pdo->query("SELECT p.nombre, SUM(d.cantidad) s FROM detalles_compra d JO
   <title>Admin - Tienda Mascotas</title>
   <link rel="stylesheet" href="assets/css/style.css">
   <style>.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;padding:16px} .k{background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:16px}</style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <header><strong>Panel de administración</strong> — <a href="index.php" style="color:#fff">Tienda</a></header>
@@ -39,6 +43,22 @@ $top = $pdo->query("SELECT p.nombre, SUM(d.cantidad) s FROM detalles_compra d JO
         <li><?= htmlspecialchars($t['nombre']) ?> — <?= (int)$t['s'] ?> und.</li>
       <?php endforeach; ?>
     </ul>
+    <h3 style="margin-top:20px">Ventas últimos 14 días</h3>
+    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:16px">
+      <canvas id="ventasChart" height="120"></canvas>
+    </div>
   </div>
+  <script>
+    const labels = <?= json_encode(array_map(fn($r)=>$r['d'], $ventasRows)) ?>;
+    const dataVals = <?= json_encode(array_map(fn($r)=>(float)$r['t'], $ventasRows)) ?>;
+    const ctx = document.getElementById('ventasChart');
+    if(ctx && labels.length){
+      new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets: [{ label: 'Ventas (S/)', data: dataVals, borderColor: '#0ea5e9', backgroundColor: 'rgba(14,165,233,0.2)', tension:.25, fill:true }] },
+        options: { responsive: true, scales: { y: { beginAtZero: true } } }
+      });
+    }
+  </script>
 </body>
 </html>

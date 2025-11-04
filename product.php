@@ -6,6 +6,9 @@ $st = $pdo->prepare("SELECT p.*, c.nombre AS categoria FROM productos p LEFT JOI
 $st->execute([$id]);
 $p = $st->fetch();
 if(!$p){ die('Producto no encontrado'); }
+// Fallback de imagen si el archivo no existe
+$img = $p['imagen'] ?? '';
+$src = ($img && file_exists(__DIR__ . '/' . $img)) ? $img : 'https://placehold.co/800x600?text=Mascotas';
 ?>
 <!doctype html>
 <html lang="es">
@@ -19,7 +22,7 @@ if(!$p){ die('Producto no encontrado'); }
   <header><a href="index.php" style="color:#fff;text-decoration:none">← Volver</a></header>
   <div class="container">
     <div class="prod">
-      <div><img src="<?= htmlspecialchars($p['imagen'] ?: 'https://placehold.co/800x600?text=Mascotas') ?>" alt=""></div>
+      <div><img src="<?= htmlspecialchars($src) ?>" alt=""></div>
       <div class="card">
         <h2><?= htmlspecialchars($p['nombre']) ?></h2>
         <div><?= htmlspecialchars($p['categoria'] ?: 'Sin categoría') ?></div>

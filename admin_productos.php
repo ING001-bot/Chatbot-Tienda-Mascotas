@@ -15,6 +15,12 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
   if(!csrf_validate($token)){
     $err = 'Token CSRF inválido';
   }
+  // Delete action
+  if(!$err && isset($_POST['delete']) && $id){
+    $pdo->prepare("DELETE FROM productos WHERE id=?")->execute([$id]);
+    $ok='Producto eliminado';
+  }
+
   $imagen = null;
   if(!empty($_FILES['imagen']['name'])){
     $dest = __DIR__ . '/uploads'; if(!is_dir($dest)) mkdir($dest, 0777, true);
@@ -26,7 +32,7 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
       if(move_uploaded_file($_FILES['imagen']['tmp_name'], $target)) $imagen = 'uploads/'.$fn;
     }
   }
-  if(!$err && $nombre && $precio>=0){
+  if(!$err && !isset($_POST['delete']) && $nombre && $precio>=0){
     if($id){
       $st0 = $pdo->prepare("SELECT imagen FROM productos WHERE id=?"); $st0->execute([$id]); $prev=$st0->fetch(); if(!$imagen){ $imagen=$prev['imagen']??null; }
       $st = $pdo->prepare("UPDATE productos SET categoria_id=?, nombre=?, descripcion=?, precio=?, stock=?, imagen=? WHERE id=?");
@@ -37,9 +43,8 @@ if($_SERVER['REQUEST_METHOD']==='POST'){
       $st->execute([$categoria_id ?: null, $nombre, $descripcion, $precio, $stock, $imagen]);
       $ok = 'Producto creado';
     }
-  } elseif(!$err) { $err='Nombre y precio son requeridos'; }
+  } elseif(!$err && !isset($_POST['delete'])) { $err='Nombre y precio son requeridos'; }
 }
-if(isset($_GET['del'])){ $id=(int)$_GET['del']; $pdo->prepare("DELETE FROM productos WHERE id=?")->execute([$id]); $ok='Producto eliminado'; }
 $edit=null; if(isset($_GET['edit'])){ $id=(int)$_GET['edit']; $st=$pdo->prepare("SELECT * FROM productos WHERE id=?"); $st->execute([$id]); $edit=$st->fetch(); }
 $cats = $pdo->query("SELECT id,nombre FROM categorias ORDER BY nombre")->fetchAll();
 $rows = $pdo->query("SELECT p.id,p.nombre,p.precio,p.stock,c.nombre AS categoria FROM productos p LEFT JOIN categorias c ON c.id=p.categoria_id ORDER BY p.id DESC")->fetchAll();
@@ -93,7 +98,11 @@ $rows = $pdo->query("SELECT p.id,p.nombre,p.precio,p.stock,c.nombre AS categoria
         <td><?= (int)$r['stock'] ?></td>
         <td>
           <a href="admin_productos.php?edit=<?= (int)$r['id'] ?>">Editar</a> |
-          <a href="admin_productos.php?del=<?= (int)$r['id'] ?>" onclick="return confirm('¿Eliminar producto?')">Eliminar</a>
+          <form method="post" style="display:inline" onsubmit="return confirm('¿Eliminar producto?')">
+            <input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token()) ?>">
+            <input type="hidden" name="id" value="<?= (int)$r['id'] ?>">
+            <button name="delete" value="1" style="background:none;border:0;color:#0ea5e9;cursor:pointer;padding:0">Eliminar</button>
+          </form>
         </td>
       </tr>
     <?php endforeach; ?>

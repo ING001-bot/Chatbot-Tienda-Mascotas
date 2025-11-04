@@ -2,17 +2,24 @@
 # CHATBOT CON VOZ (Python 3.13)
 # ============================================
 
-# Instalación previa de librerías:
-# py -3.13 -m pip install SpeechRecognition
-# py -3.13 -m pip install pipwin
-# py -3.13 -m pipwin install pyaudio
-# py -3.13 -m pip install pyttsx3
+# Instalación previa de librerías (opcional voz local):
+# py -3.13 -m pip install SpeechRecognition pyttsx3 pyaudio
 
-import speech_recognition as sr   # Para reconocer la voz y convertirla a texto
-import pyttsx3                    # Para que el bot hable
-import pyaudio                    # Para usar el micrófono
+try:
+    import speech_recognition as sr   # Para reconocer la voz y convertirla a texto
+except Exception:
+    sr = None
+try:
+    import pyttsx3                    # Para que el bot hable
+except Exception:
+    pyttsx3 = None
+try:
+    import pyaudio                    # Para usar el micrófono
+except Exception:
+    pyaudio = None
 from flask import Flask, request, jsonify
 import os
+import pymysql
 try:
     import numpy as np
     from resemblyzer import VoiceEncoder, preprocess_wav
@@ -21,16 +28,17 @@ except Exception:
     HAS_SPEAKER = False
 from datetime import datetime
 
-# Inicializamos los módulos
-r = sr.Recognizer()
-engine = pyttsx3.init()
+// Inicializamos los módulos (opcional)
+r = sr.Recognizer() if sr else None
+engine = pyttsx3.init() if pyttsx3 else None
 
 # Configurar voz en español si está disponible
-voices = engine.getProperty('voices')
-for voice in voices:
-    if "Spanish" in voice.name or "ES" in voice.id:
-        engine.setProperty('voice', voice.id)
-        break
+if engine:
+    voices = engine.getProperty('voices')
+    for voice in voices:
+        if "Spanish" in voice.name or "ES" in voice.id:
+            engine.setProperty('voice', voice.id)
+            break
 
 # Diccionario de respuestas
 respuestas = {
@@ -54,27 +62,28 @@ def sentimiento_simple(t: str) -> str:
     return "neutral"
 
 def hablar(texto):
-    """Convierte texto a voz y lo muestra en consola."""
+    """Convierte texto a voz (si engine está disponible) y lo muestra en consola."""
     print(f"Bot: {texto}")
-    engine.say(texto)
-    engine.runAndWait()
+    if engine:
+        try:
+            engine.say(texto)
+            engine.runAndWait()
+        except Exception:
+            pass
 
 def escuchar():
-    """Escucha al usuario y devuelve el texto reconocido."""
+    """Escucha al usuario y devuelve el texto reconocido (si SR disponible)."""
+    if not r or not sr:
+        return ""
     with sr.Microphone() as source:
         print("\n Escuchando...")
         r.adjust_for_ambient_noise(source)
         audio = r.listen(source)
-
     try:
         texto = r.recognize_google(audio, language="es-ES")
         print(f"Tú: {texto}")
         return texto.lower()
-    except sr.UnknownValueError:
-        print("No entendí, repite por favor.")
-        return ""
-    except sr.RequestError:
-        print("Error al conectar con el servicio de voz.")
+    except Exception:
         return ""
 
 def chatbot():
@@ -102,6 +111,40 @@ def chatbot():
 if __name__ == "__main__":
     # Servidor Flask para integrar con PHP
     app = Flask(__name__)
+    API_KEY = os.environ.get('CHATBOT_API_KEY', '').strip()
+
+    def check_api_key():
+        if not API_KEY:
+            return True
+        hdr = request.headers.get('X-API-Key','').strip()
+        return hdr == API_KEY
+
+    def db_conn():
+        # Config default compatibles con XAMPP
+        return pymysql.connect(host='localhost', user='root', password='', database='tienda_mascotas', cursorclass=pymysql.cursors.DictCursor, autocommit=True)
+
+    def ultima_compra(user_id):
+        try:
+            con = db_conn()
+            with con.cursor() as cur:
+                cur.execute("SELECT id,total,estado,fecha FROM compras WHERE usuario_id=%s ORDER BY id DESC LIMIT 1", (user_id,))
+                c = cur.fetchone()
+                if not c:
+                    return None, None
+                cur.execute("SELECT p.nombre,d.cantidad FROM detalles_compra d JOIN productos p ON p.id=d.producto_id WHERE d.compra_id=%s", (c['id'],))
+                items = cur.fetchall()
+                return c, items
+        except Exception:
+            return None, None
+
+    def productos_destacados(limit=3):
+        try:
+            con = db_conn()
+            with con.cursor() as cur:
+                cur.execute("SELECT nombre, precio FROM productos ORDER BY id DESC LIMIT %s", (limit,))
+                return cur.fetchall()
+        except Exception:
+            return []
     SPEAKERS_DIR = os.path.join(os.path.dirname(__file__), 'speakers')
     os.makedirs(SPEAKERS_DIR, exist_ok=True)
     encoder = VoiceEncoder() if HAS_SPEAKER else None
@@ -109,6 +152,8 @@ if __name__ == "__main__":
     @app.get('/chatbot')
     @app.post('/chatbot')
     def api_chat():
+        if not check_api_key():
+            return jsonify({"status":"error","message":"forbidden"}), 403
         mensaje = request.args.get('mensaje') or (request.json or {}).get('mensaje') or ''
         usuario = request.args.get('usuario') or (request.json or {}).get('usuario') or 'Invitado'
         session_id = request.args.get('session_id') or (request.json or {}).get('session_id') or ''
@@ -121,7 +166,24 @@ if __name__ == "__main__":
                 resp = v
                 break
         if not resp:
-            resp = "Puedo ayudarte a registrarte, comprar o resolver dudas sobre productos."
+            # Intents con BD: última compra / estado
+            if user_id and any(k in low for k in ['ultima compra','última compra','historial','estado']):
+                c, items = ultima_compra(user_id)
+                if c:
+                    lst = ", ".join([f"{it['cantidad']}x {it['nombre']}" for it in items]) if items else ''
+                    resp = f"Tu última compra #{c['id']} está en estado '{c['estado']}', total S/ {c['total']}. {('Items: '+lst) if lst else ''}"
+                else:
+                    resp = "Aún no tienes compras registradas."
+            # Productos sugeridos
+            elif any(k in low for k in ['producto','collar','juguete','recom']):
+                rows = productos_destacados(3)
+                if rows:
+                    s = "; ".join([f"{r['nombre']} (S/ {r['precio']:.2f})" for r in rows])
+                    resp = f"Algunas opciones: {s}. ¿Quieres ver más detalles?"
+                else:
+                    resp = "Puedo mostrarte nuestros productos más recientes."
+            else:
+                resp = "Puedo ayudarte a registrarte, comprar o resolver dudas sobre productos."
 
         senti = sentimiento_simple(mensaje)
         action = None
